@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>SolarTrace · Dashboard Renovables</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+      body {
+        background: #0b1220;
+        color: #e6edf3;
+      }
+      .card {
+        background: #111a2b;
+        border: 1px solid #1c2740;
+      }
+      .chart-wrap {
+        height: 320px;
+      }
+    </style>
+  </head>
+  <body class="pb-5">
+    <div class="container py-4">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h3 m-0">SolarTrace · Dashboard</h1>
+        <a class="btn btn-outline-light btn-sm" href="index.html">Inicio</a>
+      </div>
+
+      <div class="card p-3 mb-4">
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <label class="form-label">País (opcional)</label>
+            <input
+              id="country"
+              class="form-control"
+              placeholder="Ej: Colombia"
+            />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Año (opcional)</label>
+            <input
+              id="year"
+              type="number"
+              class="form-control"
+              placeholder="Ej: 2020"
+            />
+          </div>
+          <div class="col-6 col-md-3 d-flex align-items-end">
+            <button id="apply" class="btn btn-primary w-100">Aplicar</button>
+          </div>
+          <div class="col-12 col-md-2 d-flex align-items-end">
+            <button id="reset" class="btn btn-secondary w-100">Limpiar</button>
+          </div>
+        </div>
+        <small class="text-secondary mt-2 d-block"
+          >Vacío = Global (último año disponible).</small
+        >
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12 col-lg-6">
+          <div class="card p-3 h-100">
+            <h2 class="h6 mb-2">Producción por fuente (Barras)</h2>
+            <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+            <div class="small text-secondary" id="barMeta"></div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="card p-3 h-100">
+            <h2 class="h6 mb-2">Participación renovables (Torta)</h2>
+            <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+            <div class="small text-secondary" id="pieMeta"></div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="card p-3 h-100">
+            <h2 class="h6 mb-2">Capacidad instalada (Líneas)</h2>
+            <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="card p-3 h-100">
+            <h2 class="h6 mb-2">Renovable vs Convencional (Área)</h2>
+            <div class="chart-wrap"><canvas id="areaChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API = "http://localhost:8000/api";
+      const qs = (s) => document.querySelector(s);
+      let barC, pieC, lineC, areaC;
+      const destroy = (c) => {
+        if (c) c.destroy();
+      };
+
+      async function getJSON(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json();
+      }
+      function p(country, year) {
+        const u = new URLSearchParams();
+        if (country) u.set("country", country);
+        if (year) u.set("year", year);
+        return u.toString() ? "?" + u.toString() : "";
+      }
+
+      async function loadBar(country, year) {
+        const d = await getJSON(
+          `${API}/stats/production-by-source${p(country, year)}`
+        );
+        destroy(barC);
+        barC = new Chart(qs("#barChart"), {
+          type: "bar",
+          data: {
+            labels: d.items.map((i) => i.label),
+            datasets: [
+              { label: "Producción", data: d.items.map((i) => i.value || 0) },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false },
+        });
+        qs("#barMeta").textContent = `Año: ${d.year}${
+          country ? " · " + country : ""
+        }`;
+      }
+
+      async function loadPie(country, year) {
+        const d = await getJSON(
+          `${API}/stats/renewables-share${p(country, year)}`
+        );
+        destroy(pieC);
+        pieC = new Chart(qs("#pieChart"), {
+          type: "pie",
+          data: {
+            labels: ["Renovables", "Viento", "Solar", "Hidro"],
+            datasets: [
+              {
+                data: [
+                  d.renewables || 0,
+                  d.wind || 0,
+                  d.solar || 0,
+                  d.hydro || 0,
+                ],
+              },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false },
+        });
+        qs("#pieMeta").textContent = `Año: ${d.year}${
+          country ? " · " + country : ""
+        }`;
+      }
+
+      async function loadLines(country) {
+        const arr = await getJSON(
+          `${API}/stats/installed-capacity-trends${p(country)}`
+        );
+        destroy(lineC);
+        lineC = new Chart(qs("#lineChart"), {
+          type: "line",
+          data: {
+            labels: arr.map((r) => r.year),
+            datasets: [
+              { label: "Eólica (GW)", data: arr.map((r) => r.wind_gw || 0) },
+              { label: "Solar PV (GW)", data: arr.map((r) => r.solar_pv || 0) },
+              {
+                label: "Geotérmica (GW)",
+                data: arr.map((r) => r.geothermal || 0),
+              },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false },
+        });
+      }
+
+      async function loadArea(country) {
+        const arr = await getJSON(
+          `${API}/stats/renewable-vs-conventional${p(country)}`
+        );
+        destroy(areaC);
+        areaC = new Chart(qs("#areaChart"), {
+          type: "line",
+          data: {
+            labels: arr.map((r) => r.year),
+            datasets: [
+              {
+                label: "Renovable",
+                data: arr.map((r) => r.renewable || 0),
+                fill: true,
+              },
+              {
+                label: "Convencional",
+                data: arr.map((r) => r.conventional || 0),
+                fill: true,
+              },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false },
+        });
+      }
+
+      async function loadAll() {
+        const country = qs("#country").value.trim() || null;
+        const yearStr = qs("#year").value.trim();
+        const year = yearStr ? Number(yearStr) : null;
+        await Promise.all([
+          loadBar(country, year),
+          loadPie(country, year),
+          loadLines(country),
+          loadArea(country),
+        ]).catch((e) => {
+          alert("Error cargando datos");
+          console.error(e);
+        });
+      }
+
+      qs("#apply").onclick = loadAll;
+      qs("#reset").onclick = () => {
+        qs("#country").value = "";
+        qs("#year").value = "";
+        loadAll();
+      };
+      loadAll();
+    </script>
+  </body>
+</html>
