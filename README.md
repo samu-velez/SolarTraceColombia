@@ -20,8 +20,6 @@ Solar Trace es un proyecto que se fundamenta en el análisis de datos oficiales 
 - [@Samu-velez](https://github.com/samu-velez)
 
 
-![Logo](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/th5xamgrr6se0x5ro4g6.png)
-
 Aplicativo web para analizar la transición energética renovable (1965–2022).  
 Backend construido en **FastAPI** — Frontend en **Bootstrap + Chart.js**.
 
